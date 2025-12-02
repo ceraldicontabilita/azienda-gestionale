@@ -58,15 +58,15 @@ class AuthService:
     async def register_user(
         email: str,
         password: str,
-        ragione_sociale: str,
-        partita_iva: str
+        ragione_sociale: str = None,
+        partita_iva: str = None
     ) -> Dict:
         """Registra nuovo utente"""
         try:
-            utenti_table = get_table('utenti')
+            users_table = get_table('users')
             
             # Verifica email già esistente
-            existing = utenti_table.select('*').eq('email', email).execute()
+            existing = users_table.select('*').eq('email', email).execute()
             if existing.data:
                 raise ValueError("Email già registrata")
             
@@ -74,14 +74,18 @@ class AuthService:
             password_hash = AuthService.hash_password(password)
             
             # Crea utente
-            result = utenti_table.insert({
+            user_data = {
                 'email': email,
                 'password_hash': password_hash,
-                'ragione_sociale': ragione_sociale,
-                'partita_iva': partita_iva,
-                'attivo': True,
                 'created_at': datetime.now().isoformat()
-            }).execute()
+            }
+            
+            if ragione_sociale:
+                user_data['full_name'] = ragione_sociale
+            if partita_iva:
+                user_data['role'] = 'admin'
+            
+            result = users_table.insert(user_data).execute()
             
             if not result.data:
                 raise Exception("Errore creazione utente")
@@ -101,7 +105,8 @@ class AuthService:
                 "user": {
                     "id": user['id'],
                     "email": user['email'],
-                    "ragione_sociale": user['ragione_sociale']
+                    "full_name": user.get('full_name', ''),
+                    "role": user.get('role', 'user')
                 }
             }
             
@@ -113,10 +118,10 @@ class AuthService:
     async def login_user(email: str, password: str) -> Dict:
         """Login utente"""
         try:
-            utenti_table = get_table('utenti')
+            users_table = get_table('users')
             
             # Trova utente
-            result = utenti_table.select('*').eq('email', email).execute()
+            result = users_table.select('*').eq('email', email).execute()
             
             if not result.data:
                 raise ValueError("Credenziali non valide")
@@ -126,10 +131,6 @@ class AuthService:
             # Verifica password
             if not AuthService.verify_password(password, user['password_hash']):
                 raise ValueError("Credenziali non valide")
-            
-            # Verifica utente attivo
-            if not user.get('attivo', True):
-                raise ValueError("Utente disattivato")
             
             # Crea token
             token = AuthService.create_access_token({
@@ -144,8 +145,8 @@ class AuthService:
                 "user": {
                     "id": user['id'],
                     "email": user['email'],
-                    "ragione_sociale": user['ragione_sociale'],
-                    "partita_iva": user['partita_iva']
+                    "full_name": user.get('full_name', ''),
+                    "role": user.get('role', 'user')
                 }
             }
             
@@ -161,8 +162,8 @@ class AuthService:
             if not payload:
                 return None
             
-            utenti_table = get_table('utenti')
-            result = utenti_table.select('*').eq('id', payload['user_id']).execute()
+            users_table = get_table('users')
+            result = users_table.select('*').eq('id', payload['user_id']).execute()
             
             if not result.data:
                 return None
@@ -171,8 +172,8 @@ class AuthService:
             return {
                 "id": user['id'],
                 "email": user['email'],
-                "ragione_sociale": user['ragione_sociale'],
-                "partita_iva": user['partita_iva']
+                "full_name": user.get('full_name', ''),
+                "role": user.get('role', 'user')
             }
             
         except Exception as e:
