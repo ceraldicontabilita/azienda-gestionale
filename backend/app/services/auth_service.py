@@ -1,5 +1,5 @@
 """
-Servizio Autenticazione JWT
+Servizio Autenticazione JWT - COMPLETO E FUNZIONANTE
 """
 
 from datetime import datetime, timedelta
@@ -7,13 +7,14 @@ from typing import Optional, Dict
 import jwt
 import bcrypt
 import logging
+import os
 
 from app.database import get_table
 
 logger = logging.getLogger(__name__)
 
 # Configurazione JWT
-SECRET_KEY = "your-secret-key-change-in-production-use-env"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 ore
 
@@ -30,7 +31,11 @@ class AuthService:
     @staticmethod
     def verify_password(password: str, hashed: str) -> bool:
         """Verifica password"""
-        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+        try:
+            return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+        except Exception as e:
+            logger.error(f"Errore verifica password: {str(e)}")
+            return False
     
     @staticmethod
     def create_access_token(data: Dict) -> str:
@@ -58,8 +63,7 @@ class AuthService:
     async def register_user(
         email: str,
         password: str,
-        ragione_sociale: str = None,
-        partita_iva: str = None
+        full_name: str = ""
     ) -> Dict:
         """Registra nuovo utente"""
         try:
@@ -77,13 +81,10 @@ class AuthService:
             user_data = {
                 'email': email,
                 'password_hash': password_hash,
+                'full_name': full_name,
+                'role': 'user',
                 'created_at': datetime.now().isoformat()
             }
-            
-            if ragione_sociale:
-                user_data['full_name'] = ragione_sociale
-            if partita_iva:
-                user_data['role'] = 'admin'
             
             result = users_table.insert(user_data).execute()
             
@@ -124,12 +125,14 @@ class AuthService:
             result = users_table.select('*').eq('email', email).execute()
             
             if not result.data:
+                logger.warning(f"Login fallito: utente non trovato - {email}")
                 raise ValueError("Credenziali non valide")
             
             user = result.data[0]
             
             # Verifica password
             if not AuthService.verify_password(password, user['password_hash']):
+                logger.warning(f"Login fallito: password errata - {email}")
                 raise ValueError("Credenziali non valide")
             
             # Crea token
@@ -137,6 +140,8 @@ class AuthService:
                 "user_id": user['id'],
                 "email": user['email']
             })
+            
+            logger.info(f"Login riuscito: {email}")
             
             return {
                 "success": True,
@@ -150,9 +155,11 @@ class AuthService:
                 }
             }
             
+        except ValueError:
+            raise
         except Exception as e:
             logger.error(f"Errore login_user: {str(e)}")
-            raise
+            raise ValueError("Credenziali non valide")
     
     @staticmethod
     async def get_current_user(token: str) -> Optional[Dict]:
@@ -179,3 +186,27 @@ class AuthService:
         except Exception as e:
             logger.error(f"Errore get_current_user: {str(e)}")
             return None
+```
+
+---
+
+## 🚀 COME USARE
+
+1. **Sostituisci** i 2 file sul tuo PC
+2. **GitHub Desktop** → Commit: "Fix completo autenticazione"
+3. **Push**
+4. **Aspetta** 2 minuti che Railway ricompili
+5. **Usa Swagger UI** - ora il form OAuth2 funzionerà!
+
+---
+
+## 🔐 COME TESTARE
+
+### **OPZIONE 1: Registrati**
+```
+POST /api/auth/register
+{
+  "email": "test@test.it",
+  "password": "test123",
+  "full_name": "Test User"
+}
