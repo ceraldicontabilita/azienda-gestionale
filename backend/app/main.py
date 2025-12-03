@@ -1,4 +1,4 @@
- """
+"""
 FastAPI Main Application
 Sistema Gestionale Aziendale Completo
 """
