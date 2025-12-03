@@ -2,8 +2,11 @@
 Database Connection - Supabase + AsyncPG
 """
 import os
-from typing import Optional, AsyncGenerator
+from typing import Optional, Any
 from dotenv import load_dotenv
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -23,15 +26,18 @@ try:
         print("✅ Supabase client initialized")
     else:
         supabase = None
-        print("⚠️  Supabase credentials not found in .env")
+        print("⚠️ Supabase credentials not found in environment")
         
 except ImportError:
     supabase = None
-    print("⚠️  supabase-py not installed. Install with: pip install supabase-py")
+    print("⚠️ supabase-py not installed. Install with: pip install supabase")
+except Exception as e:
+    supabase = None
+    print(f"⚠️ Supabase initialization error: {e}")
 
 
 # ============================================================================
-# ASYNCPG CONNECTION
+# ASYNCPG CONNECTION (Optional)
 # ============================================================================
 
 try:
@@ -40,20 +46,24 @@ try:
     database_url = os.getenv("DATABASE_URL")
     
     if not database_url:
-        print("⚠️  DATABASE_URL not found in .env")
+        print("⚠️ DATABASE_URL not found in environment")
         database_url = None
         
 except ImportError:
     asyncpg = None
-    print("⚠️  asyncpg not installed. Install with: pip install asyncpg")
+    print("⚠️ asyncpg not installed")
+    database_url = None
+except Exception as e:
+    print(f"⚠️ AsyncPG error: {e}")
+    asyncpg = None
     database_url = None
 
 
 class Database:
     """
     Database wrapper con supporto per:
-    - AsyncPG (query SQL dirette)
-    - Supabase Client (real-time, storage, auth)
+    - Supabase Client (tabelle, real-time, storage, auth)
+    - AsyncPG (query SQL dirette - opzionale)
     """
     
     def __init__(self):
@@ -62,13 +72,9 @@ class Database:
         self.database_url = database_url
     
     async def connect(self):
-        """Initialize connection pool"""
-        if not self.database_url:
-            print("⚠️  Cannot connect: DATABASE_URL not configured")
-            return
-        
-        if not asyncpg:
-            print("⚠️  Cannot connect: asyncpg not installed")
+        """Initialize connection pool (AsyncPG)"""
+        if not self.database_url or not asyncpg:
+            logger.warning("AsyncPG pool not initialized (optional)")
             return
         
         try:
@@ -76,74 +82,81 @@ class Database:
                 self.database_url,
                 min_size=2,
                 max_size=10,
-                command_timeout=60
+                command_timeout=60,
+                server_settings={
+                    'application_name': 'azienda-gestionale'
+                }
             )
             print("✅ Database pool created")
         except Exception as e:
-            print(f"❌ Database connection failed: {e}")
+            logger.error(f"❌ Database connection failed: {e}")
             self.pool = None
     
     async def disconnect(self):
         """Close connection pool"""
         if self.pool:
             await self.pool.close()
-            print("👋 Database pool closed")
+            print("🔌 Database pool closed")
     
-    async def fetch_one(self, query: str, *args, **kwargs):
-        """Fetch single record"""
+    # ========================================================================
+    # ASYNCPG METHODS (Optional)
+    # ========================================================================
+    
+    async def fetch_one(self, query: str, *args):
+        """Fetch single record with AsyncPG"""
         if not self.pool:
             return None
         
-        async with self.pool.acquire() as conn:
-            return await conn.fetchrow(query, *args, **kwargs)
+        try:
+            async with self.pool.acquire() as conn:
+                return await conn.fetchrow(query, *args)
+        except Exception as e:
+            logger.error(f"Query error: {e}")
+            return None
     
-    async def fetch_all(self, query: str, *args, **kwargs):
-        """Fetch multiple records"""
+    async def fetch_all(self, query: str, *args):
+        """Fetch multiple records with AsyncPG"""
         if not self.pool:
             return []
         
-        async with self.pool.acquire() as conn:
-            return await conn.fetch(query, *args, **kwargs)
+        try:
+            async with self.pool.acquire() as conn:
+                return await conn.fetch(query, *args)
+        except Exception as e:
+            logger.error(f"Query error: {e}")
+            return []
     
-    async def execute(self, query: str, *args, **kwargs):
-        """Execute query"""
+    async def execute(self, query: str, *args):
+        """Execute query with AsyncPG"""
         if not self.pool:
             return None
         
-        async with self.pool.acquire() as conn:
-            return await conn.execute(query, *args, **kwargs)
+        try:
+            async with self.pool.acquire() as conn:
+                return await conn.execute(query, *args)
+        except Exception as e:
+            logger.error(f"Execute error: {e}")
+            return None
     
-    async def fetch_val(self, query: str, *args, **kwargs):
-        """Fetch single value"""
+    async def fetch_val(self, query: str, *args):
+        """Fetch single value with AsyncPG"""
         if not self.pool:
             return None
         
-        async with self.pool.acquire() as conn:
-            return await conn.fetchval(query, *args, **kwargs)
+        try:
+            async with self.pool.acquire() as conn:
+                return await conn.fetchval(query, *args)
+        except Exception as e:
+            logger.error(f"Query error: {e}")
+            return None
 
 
 # Global database instance
 db = Database()
 
 
-async def get_db() -> Database:
-    """
-    Dependency for FastAPI routes
-    
-    Usage:
-        @router.get("/users")
-        async def get_users(db = Depends(get_db)):
-            users = await db.fetch_all("SELECT * FROM users")
-            return users
-    """
-    if not db.pool:
-        await db.connect()
-    
-    return db
-
-
 # ============================================================================
-# SUPABASE HELPERS
+# SUPABASE HELPERS - USE THESE FOR AUTH/DATA
 # ============================================================================
 
 def get_supabase() -> Optional[Client]:
@@ -156,15 +169,59 @@ def get_supabase() -> Optional[Client]:
         supabase = get_supabase()
         response = supabase.table('users').select('*').execute()
     """
+    if not supabase:
+        raise Exception("Supabase not initialized")
     return supabase
 
+
+def get_table(table_name: str) -> Any:
+    """
+    Get reference to a Supabase table
+    
+    Usage:
+        from app.database import get_table
+        
+        users = get_table('users')
+        response = users.select('*').execute()
+    
+    Args:
+        table_name: Name of the table (e.g., 'users', 'employees')
+    
+    Returns:
+        Supabase table reference
+    """
+    if not supabase:
+        raise Exception("Supabase not initialized. Check SUPABASE_URL and SUPABASE_SERVICE_KEY")
+    
+    return supabase.table(table_name)
+
+
+async def get_db() -> 'Database':
+    """
+    Dependency for FastAPI routes
+    
+    Usage:
+        @router.get("/users")
+        async def get_users(db = Depends(get_db)):
+            users = await db.fetch_all("SELECT * FROM users")
+            return users
+    """
+    if not db.pool and db.database_url:
+        await db.connect()
+    
+    return db
+
+
+# ============================================================================
+# SUPABASE STORAGE HELPERS
+# ============================================================================
 
 async def supabase_upload_file(bucket: str, path: str, file_data: bytes) -> str:
     """
     Upload file to Supabase Storage
     
     Args:
-        bucket: Bucket name (e.g. 'avatars', 'documents')
+        bucket: Bucket name (e.g., 'avatars', 'documents')
         path: File path in bucket
         file_data: File bytes
     
@@ -174,13 +231,13 @@ async def supabase_upload_file(bucket: str, path: str, file_data: bytes) -> str:
     if not supabase:
         raise Exception("Supabase not initialized")
     
-    # Upload
-    supabase.storage.from_(bucket).upload(path, file_data)
-    
-    # Get public URL
-    url = supabase.storage.from_(bucket).get_public_url(path)
-    
-    return url
+    try:
+        supabase.storage.from_(bucket).upload(path, file_data)
+        url = supabase.storage.from_(bucket).get_public_url(path)
+        return url
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        raise
 
 
 async def supabase_realtime_subscribe(table: str, callback):
@@ -196,7 +253,11 @@ async def supabase_realtime_subscribe(table: str, callback):
     if not supabase:
         raise Exception("Supabase not initialized")
     
-    supabase.table(table).on('*', callback).subscribe()
+    try:
+        supabase.table(table).on('*', callback).subscribe()
+    except Exception as e:
+        logger.error(f"Subscribe error: {e}")
+        raise
 
 
 # ============================================================================
@@ -228,22 +289,32 @@ if __name__ == "__main__":
         print("=" * 60)
         print()
         
-        # Test connection
+        # Test Supabase
+        try:
+            supabase = get_supabase()
+            result = supabase.table('users').select('count', count='exact').execute()
+            print(f"✅ Supabase connection: OK")
+            print(f"   Users table count: {result.count}")
+        except Exception as e:
+            print(f"❌ Supabase connection: {e}")
+        
+        print()
+        
+        # Test AsyncPG pool
         await db.connect()
         
         if db.pool:
-            print("✅ Connection pool created")
+            print("✅ AsyncPG pool created")
             
-            # Test query
             try:
                 result = await db.fetch_val("SELECT 1 as test")
-                print(f"✅ Test query: {result}")
+                print(f"✅ AsyncPG query: {result}")
             except Exception as e:
-                print(f"❌ Test query failed: {e}")
+                print(f"❌ AsyncPG query failed: {e}")
             
             await db.disconnect()
         else:
-            print("❌ Connection failed")
+            print("⚠️ AsyncPG pool not initialized (optional)")
         
         print()
         print("=" * 60)
