@@ -1,171 +1,79 @@
 """
-FastAPI Main Application
-Sistema Gestionale Aziendale Completo
+Router Autenticazione - FUNZIONANTE SENZA CICLI
 """
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from datetime import datetime
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import OAuth2PasswordRequestForm
+import logging
+import bcrypt
+import jwt
 import os
-from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
-# Import database
-from app.database import db, startup as db_startup, shutdown as db_shutdown
+logger = logging.getLogger(__name__)
+router = APIRouter(tags=["Authentication"])
 
-# Load environment
-load_dotenv()
+# Supabase - importa QUI direttamente
+from supabase import create_client
 
-# Create app
-app = FastAPI(
-    title="Sistema Gestionale Aziendale",
-    description="API completa per gestione HR, contabilità, magazzino, HACCP",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ============================================================================
-# IMPORT ROUTERS - AUTH FIRST!
-# ============================================================================
-
-# AUTH ROUTER (IMPORTANTE - PRIMA DI TUTTO!)
-try:
-    from app.routers.auth import router as auth_router
-    app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
-    print("✅ Auth router loaded")
-except Exception as e:
-    print(f"⚠️ Auth router not loaded: {e}")
-
-try:
-    from app.routers.hr_admin import router as hr_admin_router
-    app.include_router(hr_admin_router, prefix="/api/hr", tags=["HR Admin"])
-    print("✅ HR Admin router loaded")
-except Exception as e:
-    print(f"⚠️ HR Admin router not loaded: {e}")
-
-try:
-    from app.routers.employee_portal import router as employee_portal_router
-    app.include_router(employee_portal_router, prefix="/api/portale", tags=["Employee Portal"])
-    print("✅ Employee Portal router loaded")
-except Exception as e:
-    print(f"⚠️ Employee Portal router not loaded: {e}")
-
-try:
-    from app.routers.dipendenti import router as dipendenti_router
-    app.include_router(dipendenti_router, prefix="/api/dipendenti", tags=["Dipendenti"])
-    print("✅ Dipendenti router loaded")
-except Exception as e:
-    print(f"⚠️ Dipendenti router not loaded: {e}")
-
-try:
-    from app.routers.bonifici import router as bonifici_router
-    app.include_router(bonifici_router, prefix="/api/bonifici", tags=["Bonifici"])
-    print("✅ Bonifici router loaded")
-except Exception as e:
-    print(f"⚠️ Bonifici router not loaded: {e}")
-
-try:
-    from app.routers.controllo_mensile import router as controllo_router
-    app.include_router(controllo_router, prefix="/api/controllo-mensile", tags=["Controllo Mensile"])
-    print("✅ Controllo Mensile router loaded")
-except Exception as e:
-    print(f"⚠️ Controllo Mensile router not loaded: {e}")
-
-try:
-    from app.routers.comparatore_prezzi import router as comparatore_router
-    app.include_router(comparatore_router, prefix="/api/comparatore", tags=["Comparatore Prezzi"])
-    print("✅ Comparatore Prezzi router loaded")
-except Exception as e:
-    print(f"⚠️ Comparatore Prezzi router not loaded: {e}")
-
-# ============================================================================
-# ROOT ENDPOINTS
-# ============================================================================
-
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Sistema Gestionale Aziendale API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "status": "online"
-    }
+if supabase_url and supabase_key:
+    supabase = create_client(supabase_url, supabase_key)
+    logger.info("✅ Supabase client initialized in auth")
+else:
+    supabase = None
+    logger.error("❌ Supabase not configured in auth")
 
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "database": "connected" if db.pool else "disconnected",
-        "services": {
-            "auth": "online",
-            "hr": "online",
-            "contabilità": "online",
-            "magazzino": "online"
+@router.post("/token")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """Login - OAuth2 form"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database error")
+        
+        email = form_data.username
+        password = form_data.password
+        
+        logger.info(f"Login: {email}")
+        
+        # Cerca utente
+        result = supabase.table('users').select('*').eq('email', email).execute()
+        
+        if not result.data:
+            logger.warning(f"User not found: {email}")
+            raise HTTPException(status_code=401, detail="Credenziali non valide")
+        
+        user = result.data[0]
+        logger.info(f"User found: {user['email']}")
+        
+        # Verifica password
+        if not bcrypt.checkpw(password.encode(), user['password_hash'].encode()):
+            logger.warning(f"Wrong password: {email}")
+            raise HTTPException(status_code=401, detail="Credenziali non valide")
+        
+        # Crea token
+        token_data = {
+            "user_id": user['id'],
+            "email": user['email'],
+            "exp": datetime.utcnow() + timedelta(hours=24)
         }
-    }
-
-
-# ============================================================================
-# ERROR HANDLERS
-# ============================================================================
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request, exc):
-    """Handle general exceptions"""
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.error(f"Errore: {str(exc)}", exc_info=True)
+        token = jwt.encode(
+            token_data,
+            os.getenv("JWT_SECRET_KEY", "secret"),
+            algorithm="HS256"
+        )
+        
+        logger.info(f"✅ Login success: {email}")
+        
+        return {
+            "access_token": token,
+            "token_type": "bearer"
+        }
     
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"}
-    )
-
-
-# ============================================================================
-# STARTUP/SHUTDOWN
-# ============================================================================
-
-@app.on_event("startup")
-async def startup_event():
-    """Run on startup"""
-    print("🚀 Sistema Gestionale Aziendale - Starting...")
-    print("📊 Connecting to database...")
-    await db_startup()
-    print("✅ Server ready!")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Run on shutdown"""
-    print("👋 Shutting down...")
-    await db_shutdown()
-
-
-# ============================================================================
-# DEVELOPMENT
-# ============================================================================
-
-if __name__ == "__main__":
-    import uvicorn
-    
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Login error: {e}")
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
