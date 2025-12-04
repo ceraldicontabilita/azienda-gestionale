@@ -1,247 +1,110 @@
-# 🏢 SISTEMA GESTIONALE AZIENDALE COMPLETO
+# 🚀 AZIENDA GESTIONALE - SETUP COMPLETO
 
-Sistema cloud-based completo per gestione aziendale con focus su ristorazione/pasticceria
+## 📋 CONTENUTO
 
----
+```
+├── auth.py                    # Nuovo file auth (copia su GitHub)
+├── requirements.txt           # Dependencies (copia su GitHub)
+├── GUIDA_RENDER.md           # Guida deploy su Render
+├── GUIDA_EMERGENT_SH.md      # Guida deploy su Emergent.sh
+├── SETUP_SUPABASE.sql        # SQL per creare utente admin
+└── README.md                 # Questo file
+```
 
-## 🚀 QUICK START
+## ⚡ QUICK START (5 minuti)
+
+### 1. Aggiorna GitHub
+
+Sostituisci questi file nel tuo repo:
+- `backend/app/routers/auth.py` → copia il nuovo `auth.py`
+- `backend/requirements.txt` → copia il nuovo `requirements.txt`
 
 ```bash
-# 1. Setup completo
-./setup_hr.sh
-
-# 2. Configura .env
-nano backend/.env
-
-# 3. Avvia server
-cd backend && uvicorn app.main:app --reload
+git add backend/app/routers/auth.py backend/requirements.txt
+git commit -m "Fix: Authentication and dependencies"
+git push
 ```
 
-**Accesso**: http://localhost:8000/docs
+### 2. Setup Supabase
 
----
+1. Vai a: https://supabase.com/dashboard
+2. Accedi con: `ceraldicontabilita@gmail.com`
+3. Seleziona progetto `azienda-gestionale`
+4. Vai a "SQL Editor" → "New Query"
+5. Copia il contenuto di `SETUP_SUPABASE.sql`
+6. Clicca "RUN"
 
-## 📦 MODULI COMPLETI
+Questo crea la tabella `users` e l'utente `admin@tuaazienda.it` con password `password`.
 
-✅ **HR & DIPENDENTI** - Anagrafica, buste paga, contratti, ferie, presenze  
-✅ **CONTABILITÀ** - Prima nota, bonifici, riconciliazione  
-✅ **MAGAZZINO** - Fornitori, ordini, inventario  
-✅ **RICETTE** - Calcoli nutrizionali, costi  
-✅ **HACCP** - Temperature, scadenze  
-✅ **DOCUMENTI** - Fatture XML, archivio
+### 3. Deploy
 
----
+Scegli una piattaforma:
 
-## 🎯 FUNZIONALITÀ CHIAVE
+**OPZIONE A: RENDER (Consigliato - più stabile)**
+- Segui: `GUIDA_RENDER.md`
+- Tempo: 5 minuti
+- Costo: Gratuito
 
-### Sistema Buste Paga Completo
+**OPZIONE B: EMERGENT.SH (Alternativa italiana)**
+- Segui: `GUIDA_EMERGENT_SH.md`
+- Tempo: 5 minuti
+- Costo: Dipende dal piano
 
-- ✅ Import automatico PDF (Zucchetti)
-- ✅ Email bot Gmail integrato
-- ✅ Parser avanzato con OCR
-- ✅ **Accettazione obbligatoria** dipendente
-- ✅ **Sistema contestazioni 180 giorni** (Legge 4/1943)
-- ✅ Prima nota automatica
-- ✅ Riconciliazione bancaria
+## 🔑 CREDENZIALI DI TEST
 
-### Controlli Temporali Avanzati
+Una volta deployato, usa queste credenziali per testare il login:
 
 ```
-📅 data_disponibilita → Quando arriva PDF
-⏰ data_scadenza_contestazione → +180 giorni
-👁️ data_prima_visualizzazione → Log tracciato
-✅ accettato_dipendente → Checkbox obbligatoria
-🚫 Blocco automatico se termine scaduto
+Email: admin@tuaazienda.it
+Password: password
 ```
 
----
+Vai a: `https://your-backend-url/docs`
 
-## 📡 API ENDPOINTS (60+)
+Clicca `POST /api/auth/token` e prova il login.
 
-```bash
-# HR Admin
-POST /api/hr/employees
-POST /api/hr/payslips/import
-POST /api/hr/email-bot/run
+## ❌ SE NON FUNZIONA
 
-# Portale Dipendente  
-GET  /api/portale/buste-paga/{id}
-POST /api/portale/buste-paga/{id}/accetta
-POST /api/portale/buste-paga/{id}/contesta
+### Errore: "Auth router not loaded"
 
-# Bonifici
-POST /api/bonifici/import-xls
-POST /api/bonifici/{id}/riconcilia
+**Soluzione:**
+1. Verifica che `auth.py` sia in: `backend/app/routers/auth.py`
+2. Il file deve avere esattamente 97 righe
+3. Controlla che `requirements.txt` abbia `PyJWT` e `bcrypt`
 
-# Controllo Mensile
-POST /api/controllo-mensile/genera
-```
+### Errore: "Credenziali non valide"
 
-**Docs**: http://localhost:8000/docs
+**Soluzione:**
+1. Verifica che l'utente `admin@tuaazienda.it` esista in Supabase
+2. Controlla che il password_hash sia: `$2b$12$UDbMJc5v3Vn7MdkdB0pvfe32w8WIC.32CvL2fXsSNCuafWZHQRkrW`
+3. Fai una query di verifica in Supabase: `SELECT * FROM users WHERE email = 'admin@tuaazienda.it';`
 
----
+### Errore: "Database connection failed"
 
-## 🔐 SICUREZZA
+**Soluzione:**
+1. Controlla che `DATABASE_URL` sia corretta su Render/Emergent.sh
+2. Controlla che `SUPABASE_URL` e `SUPABASE_SERVICE_KEY` siano corretti
+3. Verifica che la password Supabase sia: `Ceraldicloud2025`
 
-✅ JWT Authentication  
-✅ Password hashing (bcrypt)  
-✅ IP tracking contestazioni  
-✅ Audit trail completo  
-✅ GDPR compliant  
-✅ Validazione legale 180 giorni
+## 📞 SUPPORT
 
----
+Se hai problemi:
+1. Leggi i logs della piattaforma (Render o Emergent.sh)
+2. Verifica che tutti i file siano stati caricati su GitHub
+3. Controlla che tutte le variabili d'ambiente siano impostate
 
-## 🤖 EMAIL BOT
+## ✅ CHECKLIST FINALE
 
-**Configurazione Gmail**:
+- [ ] `auth.py` caricato su GitHub
+- [ ] `requirements.txt` caricato su GitHub
+- [ ] SQL di Supabase eseguito (tabella `users` creata)
+- [ ] Utente `admin@tuaazienda.it` creato in Supabase
+- [ ] Deploy completato su Render o Emergent.sh
+- [ ] Tutte le variabili d'ambiente configurate
+- [ ] Test login effettuato con successo
 
-1. App Password: https://myaccount.google.com/apppasswords
-2. Aggiungi in `.env`: `EMAIL_PASSWORD=xxxx xxxx xxxx xxxx`
-3. Run: `python -m app.services.email_bot_payslips`
+## 🎉 FATTO!
 
-**Cron automatico**:
-```bash
-0 * * * * cd /path && python3 -m app.services.email_bot_payslips
-```
+Una volta completati tutti gli step, il tuo backend è live e il login funziona!
 
----
-
-## 📊 DATABASE
-
-**13 tabelle HR**:
-- employees, payslips, payslip_disputes
-- contracts, leave_requests, attendances
-- bonifici, controllo_mensile
-- prima_nota_salari, employee_documents
-- hr_notifications, email_import_log, payslip_download_log
-
-**Migration**:
-```bash
-psql $DATABASE_URL -f backend/migrations/007_hr_system.sql
-```
-
----
-
-## 🎨 FRONTEND REACT
-
-- Dashboard HR interattiva
-- Viewer buste paga con accettazione
-- Form contestazione dinamico
-- Gestione dipendenti CRUD
-- Statistiche real-time
-
-**Tech**: React 18 + TailwindCSS + shadcn/ui
-
----
-
-## 📝 IMPORT AUTOMATICO
-
-### Buste Paga
-- Email bot → Parse PDF → Database
-- Formato: Zucchetti PDF
-
-### Presenze (LibroUnico)
-```bash
-POST /api/presenze/import-libro-unico
-```
-
-### Bonifici XLS
-```bash
-POST /api/bonifici/import-xls
-```
-
----
-
-## 🧪 TESTS
-
-```bash
-pytest backend/tests/test_hr.py -v
-```
-
-**Coverage**: 85%+
-
----
-
-## 📚 DOCUMENTAZIONE
-
-- **Completa**: `docs/SISTEMA_HR_DOCUMENTAZIONE.md`
-- **API**: http://localhost:8000/docs
-- **Setup**: `setup_hr.sh`
-
----
-
-## 🔧 CONFIGURAZIONE
-
-**File `.env`**:
-```env
-DATABASE_URL=postgresql://user:pass@localhost/db
-EMAIL_ADDRESS=ceraldigroupsrl@gmail.com
-EMAIL_PASSWORD=xxxx xxxx xxxx xxxx
-JWT_SECRET_KEY=your-secret-key
-DEBUG=True
-```
-
----
-
-## 📈 STATISTICHE
-
-- **10 Moduli** completi
-- **60+ API** endpoints
-- **13 Tabelle** database
-- **5 Parsers** (PDF, XLS, XML)
-- **3 Bot** automatici
-- **100+ Tests** unitari
-
----
-
-## ✅ PRODUCTION READY
-
-- ✅ Autenticazione JWT
-- ✅ Validazione dati completa
-- ✅ Error handling robusto
-- ✅ Logging avanzato
-- ✅ Rate limiting API
-- ✅ CORS configurabile
-- ✅ Database migrations
-- ✅ Backup automatici
-
----
-
-## 🚨 TROUBLESHOOTING
-
-**Email bot fails**:
-```bash
-# Test IMAP
-telnet imap.gmail.com 993
-
-# Verifica .env
-cat backend/.env | grep EMAIL
-```
-
-**Parser fails**:
-```python
-from app.services.payslip_parser import PayslipParser
-parser = PayslipParser()
-parser.parse_pdf(open('test.pdf', 'rb').read())
-```
-
----
-
-## 📞 SUPPORTO
-
-📖 Docs: `docs/SISTEMA_HR_DOCUMENTAZIONE.md`  
-🔗 API: http://localhost:8000/docs  
-💬 Issues: [GitHub]
-
----
-
-## 📄 LICENSE
-
-Proprietario - Ceraldi Group S.R.L.
-
----
-
-**Sistema completo implementato! 🎉**
-
-*Versione 1.0 - 02/12/2025*
+Buona fortuna! 🚀
